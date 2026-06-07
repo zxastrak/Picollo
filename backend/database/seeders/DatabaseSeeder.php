@@ -2,24 +2,16 @@
 
 namespace Database\Seeders;
 
-use App\Models\User;
-use Illuminate\Database\Console\Seeds\WithoutModelEvents;
 use Illuminate\Database\Seeder;
+use Spatie\Permission\Models\Role;
 
 class DatabaseSeeder extends Seeder
 {
-    use WithoutModelEvents;
-
-    /**
-     * Seed the application's database.
-     */
     public function run(): void
     {
-        // User::factory(10)->create();
-
-        User::factory()->create([
-            'name' => 'Test User',
-            'email' => 'test@example.com',
-        ]);
+        // Hanya membuat role dasar yang dibutuhkan aplikasi agar tidak crash
+        Role::firstOrCreate(['name' => 'admin', 'guard_name' => 'api']);
+        Role::firstOrCreate(['name' => 'kasir', 'guard_name' => 'api']);
+        Role::firstOrCreate(['name' => 'auditor', 'guard_name' => 'api']);
     }
 }
