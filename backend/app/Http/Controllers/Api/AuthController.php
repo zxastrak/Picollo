@@ -314,14 +314,12 @@ class AuthController extends Controller
             return response()->json(['success' => false, 'message' => 'User tidak ditemukan.'], 404);
         }
 
-        if ($request->otp_code !== '123456') {
-            if ($user->otp_code !== $request->otp_code) {
-                return response()->json(['success' => false, 'message' => 'Kode OTP tidak valid.'], 400);
-            }
+        if ($user->otp_code !== $request->otp_code) {
+            return response()->json(['success' => false, 'message' => 'Kode OTP tidak valid.'], 400);
+        }
 
-            if (now()->greaterThan($user->otp_expires_at)) {
-                return response()->json(['success' => false, 'message' => 'Kode OTP sudah kadaluarsa.'], 400);
-            }
+        if (now()->greaterThan($user->otp_expires_at)) {
+            return response()->json(['success' => false, 'message' => 'Kode OTP sudah kadaluarsa.'], 400);
         }
 
         $user->email_verified_at = now();
@@ -465,20 +463,18 @@ class AuthController extends Controller
             ], 404);
         }
 
-        if ($request->otp_code !== '123456') {
-            if ($user->otp_code !== $request->otp_code) {
-                return response()->json([
-                    'success' => false,
-                    'message' => 'Kode OTP tidak valid.',
-                ], 400);
-            }
+        if ($user->otp_code !== $request->otp_code) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Kode OTP tidak valid.',
+            ], 400);
+        }
 
-            if (now()->greaterThan($user->otp_expires_at)) {
-                return response()->json([
-                    'success' => false,
-                    'message' => 'Kode OTP sudah kadaluarsa.',
-                ], 400);
-            }
+        if (now()->greaterThan($user->otp_expires_at)) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Kode OTP sudah kadaluarsa.',
+            ], 400);
         }
 
         $user->password = Hash::make($request->password);

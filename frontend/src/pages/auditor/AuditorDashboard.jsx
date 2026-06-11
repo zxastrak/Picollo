@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react'
+import { Link } from 'react-router-dom'
 import Layout from '../../components/Layout'
 import { transaksiService } from '../../services/transaksiService'
 import { verifikasiService } from '../../services/verifikasiService'
@@ -124,9 +125,9 @@ export default function AuditorDashboard() {
           <div className="bg-white rounded-2xl border border-zinc-200 overflow-hidden shadow-sm">
             <div className="flex items-center justify-between px-5 py-4 border-b border-zinc-100 bg-zinc-50/50">
               <h3 className="font-bold text-zinc-900 text-sm">Riwayat Verifikasi Terbaru</h3>
-              <a href="/auditor/verifikasi" className="text-yellow-600 text-xs font-semibold hover:underline flex items-center gap-1">
+              <Link to="/auditor/verifikasi" className="text-yellow-600 text-xs font-semibold hover:underline flex items-center gap-1">
                 Selengkapnya
-              </a>
+              </Link>
             </div>
             {loading ? (
               <div className="p-5 space-y-3">{[...Array(3)].map((_, i) => <div key={i} className="h-12 bg-zinc-100 rounded-xl animate-pulse" />)}</div>

@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react'
+import { Link } from 'react-router-dom'
 import Layout from '../../components/Layout'
 import { transaksiService } from '../../services/transaksiService'
 
@@ -78,7 +79,7 @@ export default function KasirDashboard() {
         <div className="bg-white rounded-2xl border border-zinc-200 overflow-hidden">
           <div className="flex items-center justify-between px-5 py-4 border-b border-zinc-100">
             <h3 className="font-bold text-zinc-900 text-sm">Transaksi Terbaru Hari Ini</h3>
-            <a href="/kasir/rekap" className="text-yellow-600 text-xs font-semibold hover:underline">Lihat rekap →</a>
+            <Link to="/kasir/rekap" className="text-yellow-600 text-xs font-semibold hover:underline">Lihat rekap →</Link>
           </div>
           {loading ? (
             <div className="p-5 space-y-3">{[...Array(3)].map((_, i) => <div key={i} className="h-10 bg-zinc-100 rounded-xl animate-pulse" />)}</div>

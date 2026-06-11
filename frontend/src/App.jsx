@@ -1,42 +1,44 @@
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
+import React, { Suspense, lazy } from 'react';
 import useAuthStore from './store/authStore';
+import LoadingSpinner from './components/LoadingSpinner';
 
 // Public
-import LandingPage        from './pages/LandingPage';
-import LoginPage          from './pages/auth/LoginPage';
-import RegisterPage       from './pages/auth/RegisterPage';
-import ForgotPasswordPage from './pages/auth/ForgotPasswordPage';
-import ResetPasswordPage  from './pages/auth/ResetPasswordPage';
-import VerifyEmailPage    from './pages/auth/VerifyEmailPage';
+const LandingPage        = lazy(() => import('./pages/LandingPage'));
+const LoginPage          = lazy(() => import('./pages/auth/LoginPage'));
+const RegisterPage       = lazy(() => import('./pages/auth/RegisterPage'));
+const ForgotPasswordPage = lazy(() => import('./pages/auth/ForgotPasswordPage'));
+const ResetPasswordPage  = lazy(() => import('./pages/auth/ResetPasswordPage'));
+const VerifyEmailPage    = lazy(() => import('./pages/auth/VerifyEmailPage'));
 
 // Admin
-import AdminDashboard  from "./pages/admin/AdminDashboard";
-import AdminOutlet     from "./pages/admin/ManajemenOutlet";
-import AdminProduk     from "./pages/admin/Produk";
-import AdminTransaksi  from "./pages/admin/Transaksi";
-import AdminLaporan    from "./pages/admin/Laporan";
-import AdminVerifikasi from "./pages/admin/Verifikasi";
-import AdminKasir      from "./pages/admin/ManajemenKasir";
-import AdminAuditor    from "./pages/admin/ManajemenAuditor";
-import AdminPengawasan from "./pages/admin/PengawasanKasir";
-import AdminLogKoreksi from "./pages/admin/LogKoreksi";
-import AdminPengaturan from "./pages/admin/Pengaturan";
+const AdminDashboard  = lazy(() => import("./pages/admin/AdminDashboard"));
+const AdminOutlet     = lazy(() => import("./pages/admin/ManajemenOutlet"));
+const AdminProduk     = lazy(() => import("./pages/admin/Produk"));
+const AdminTransaksi  = lazy(() => import("./pages/admin/Transaksi"));
+const AdminLaporan    = lazy(() => import("./pages/admin/Laporan"));
+const AdminVerifikasi = lazy(() => import("./pages/admin/Verifikasi"));
+const AdminKasir      = lazy(() => import("./pages/admin/ManajemenKasir"));
+const AdminAuditor    = lazy(() => import("./pages/admin/ManajemenAuditor"));
+const AdminPengawasan = lazy(() => import("./pages/admin/PengawasanKasir"));
+const AdminLogKoreksi = lazy(() => import("./pages/admin/LogKoreksi"));
+const AdminPengaturan = lazy(() => import("./pages/admin/Pengaturan"));
 
 // Kasir
-import KasirDashboard from "./pages/kasir/KasirDashboard";
-import KasirTransaksi from "./pages/kasir/Transaksi";
-import KasirRekap     from "./pages/kasir/RekapHarian";
+const KasirDashboard = lazy(() => import("./pages/kasir/KasirDashboard"));
+const KasirTransaksi = lazy(() => import("./pages/kasir/Transaksi"));
+const KasirRekap     = lazy(() => import("./pages/kasir/RekapHarian"));
 
 // Auditor
-import AuditorDashboard  from "./pages/auditor/AuditorDashboard";
-import AuditorTransaksi  from "./pages/auditor/Transaksi";
-import AuditorLaporan    from "./pages/auditor/Laporan";
-import AuditorVerifikasi from "./pages/auditor/Verifikasi";
-import AuditorPengawasan from "./pages/auditor/PengawasanKasir";
-import AuditorLogKoreksi from "./pages/auditor/LogKoreksi";
+const AuditorDashboard  = lazy(() => import("./pages/auditor/AuditorDashboard"));
+const AuditorTransaksi  = lazy(() => import("./pages/auditor/Transaksi"));
+const AuditorLaporan    = lazy(() => import("./pages/auditor/Laporan"));
+const AuditorVerifikasi = lazy(() => import("./pages/auditor/Verifikasi"));
+const AuditorPengawasan = lazy(() => import("./pages/auditor/PengawasanKasir"));
+const AuditorLogKoreksi = lazy(() => import("./pages/auditor/LogKoreksi"));
 
 // Profil (Global)
-import Profil from "./pages/Profil";
+const Profil = lazy(() => import("./pages/Profil"));
 
 // Guard
 function ProtectedRoute({ children, allowedRoles }) {
@@ -61,49 +63,51 @@ const AuditorRoute = ({ children }) => (
 export default function App() {
     return (
         <BrowserRouter>
-            <Routes>
+            <Suspense fallback={<div className="h-screen flex items-center justify-center"><LoadingSpinner text="Memuat antarmuka..." /></div>}>
+                <Routes>
 
-                {/* ── Public ── */}
-                <Route path="/"                element={<LandingPage />} />
-                <Route path="/login"           element={<LoginPage />} />
-                <Route path="/register"        element={<RegisterPage />} />
-                <Route path="/forgot-password" element={<ForgotPasswordPage />} />
-                <Route path="/reset-password"  element={<ResetPasswordPage />} />
-                <Route path="/verify-email"    element={<VerifyEmailPage />} />
+                    {/* ── Public ── */}
+                    <Route path="/"                element={<LandingPage />} />
+                    <Route path="/login"           element={<LoginPage />} />
+                    <Route path="/register"        element={<RegisterPage />} />
+                    <Route path="/forgot-password" element={<ForgotPasswordPage />} />
+                    <Route path="/reset-password"  element={<ResetPasswordPage />} />
+                    <Route path="/verify-email"    element={<VerifyEmailPage />} />
 
-                {/* ── Admin ── */}
-                <Route path="/admin/dashboard"   element={<AdminRoute><AdminDashboard /></AdminRoute>} />
-                <Route path="/admin/outlet"      element={<AdminRoute><AdminOutlet /></AdminRoute>} />
-                <Route path="/admin/produk"      element={<AdminRoute><AdminProduk /></AdminRoute>} />
-                <Route path="/admin/transaksi"   element={<AdminRoute><AdminTransaksi /></AdminRoute>} />
-                <Route path="/admin/laporan"     element={<AdminRoute><AdminLaporan /></AdminRoute>} />
-                <Route path="/admin/verifikasi"  element={<AdminRoute><AdminVerifikasi /></AdminRoute>} />
-                <Route path="/admin/kasir"       element={<AdminRoute><AdminKasir /></AdminRoute>} />
-                <Route path="/admin/auditor"     element={<AdminRoute><AdminAuditor /></AdminRoute>} />
-                <Route path="/admin/pengawasan"  element={<AdminRoute><AdminPengawasan /></AdminRoute>} />
-                <Route path="/admin/log-koreksi" element={<AdminRoute><AdminLogKoreksi /></AdminRoute>} />
-                <Route path="/admin/pengaturan"  element={<AdminRoute><AdminPengaturan /></AdminRoute>} />
+                    {/* ── Admin ── */}
+                    <Route path="/admin/dashboard"   element={<AdminRoute><AdminDashboard /></AdminRoute>} />
+                    <Route path="/admin/outlet"      element={<AdminRoute><AdminOutlet /></AdminRoute>} />
+                    <Route path="/admin/produk"      element={<AdminRoute><AdminProduk /></AdminRoute>} />
+                    <Route path="/admin/transaksi"   element={<AdminRoute><AdminTransaksi /></AdminRoute>} />
+                    <Route path="/admin/laporan"     element={<AdminRoute><AdminLaporan /></AdminRoute>} />
+                    <Route path="/admin/verifikasi"  element={<AdminRoute><AdminVerifikasi /></AdminRoute>} />
+                    <Route path="/admin/kasir"       element={<AdminRoute><AdminKasir /></AdminRoute>} />
+                    <Route path="/admin/auditor"     element={<AdminRoute><AdminAuditor /></AdminRoute>} />
+                    <Route path="/admin/pengawasan"  element={<AdminRoute><AdminPengawasan /></AdminRoute>} />
+                    <Route path="/admin/log-koreksi" element={<AdminRoute><AdminLogKoreksi /></AdminRoute>} />
+                    <Route path="/admin/pengaturan"  element={<AdminRoute><AdminPengaturan /></AdminRoute>} />
 
-                {/* ── Kasir ── */}
-                <Route path="/kasir/dashboard" element={<KasirRoute><KasirDashboard /></KasirRoute>} />
-                <Route path="/kasir/transaksi" element={<KasirRoute><KasirTransaksi /></KasirRoute>} />
-                <Route path="/kasir/rekap"     element={<KasirRoute><KasirRekap /></KasirRoute>} />
+                    {/* ── Kasir ── */}
+                    <Route path="/kasir/dashboard" element={<KasirRoute><KasirDashboard /></KasirRoute>} />
+                    <Route path="/kasir/transaksi" element={<KasirRoute><KasirTransaksi /></KasirRoute>} />
+                    <Route path="/kasir/rekap"     element={<KasirRoute><KasirRekap /></KasirRoute>} />
 
-                {/* ── Auditor ── */}
-                <Route path="/auditor/dashboard"   element={<AuditorRoute><AuditorDashboard /></AuditorRoute>} />
-                <Route path="/auditor/transaksi"   element={<AuditorRoute><AuditorTransaksi /></AuditorRoute>} />
-                <Route path="/auditor/laporan"     element={<AuditorRoute><AuditorLaporan /></AuditorRoute>} />
-                <Route path="/auditor/verifikasi"  element={<AuditorRoute><AuditorVerifikasi /></AuditorRoute>} />
-                <Route path="/auditor/pengawasan"  element={<AuditorRoute><AuditorPengawasan /></AuditorRoute>} />
-                <Route path="/auditor/log-koreksi" element={<AuditorRoute><AuditorLogKoreksi /></AuditorRoute>} />
+                    {/* ── Auditor ── */}
+                    <Route path="/auditor/dashboard"   element={<AuditorRoute><AuditorDashboard /></AuditorRoute>} />
+                    <Route path="/auditor/transaksi"   element={<AuditorRoute><AuditorTransaksi /></AuditorRoute>} />
+                    <Route path="/auditor/laporan"     element={<AuditorRoute><AuditorLaporan /></AuditorRoute>} />
+                    <Route path="/auditor/verifikasi"  element={<AuditorRoute><AuditorVerifikasi /></AuditorRoute>} />
+                    <Route path="/auditor/pengawasan"  element={<AuditorRoute><AuditorPengawasan /></AuditorRoute>} />
+                    <Route path="/auditor/log-koreksi" element={<AuditorRoute><AuditorLogKoreksi /></AuditorRoute>} />
 
-                {/* ── Admin Profil ── */}
-                <Route path="/profil" element={<AdminRoute><Profil /></AdminRoute>} />
+                    {/* ── Admin Profil ── */}
+                    <Route path="/profil" element={<AdminRoute><Profil /></AdminRoute>} />
 
-                {/* Fallback */}
-                <Route path="*" element={<Navigate to="/" replace />} />
+                    {/* Fallback */}
+                    <Route path="*" element={<Navigate to="/" replace />} />
 
-            </Routes>
+                </Routes>
+            </Suspense>
         </BrowserRouter>
     );
 }

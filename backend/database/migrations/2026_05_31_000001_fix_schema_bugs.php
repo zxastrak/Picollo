@@ -22,13 +22,8 @@ return new class extends Migration
     {
         // FIX 1: Tambah 'voided' ke enum hash_verifications.status
         // MySQL tidak support Schema::table untuk modify enum langsung,
-        // harus pakai raw SQL
-        DB::statement("
-            ALTER TABLE hash_verifications 
-            MODIFY COLUMN status 
-            ENUM('pending','verified','fraud_detected','voided') 
-            NOT NULL DEFAULT 'pending'
-        ");
+        // Di PostgreSQL dan di cloud, lebih aman biarkan sebagai string.
+        // DB::statement("..."); // DIHAPUS KARENA TIDAK KOMPATIBEL DENGAN POSTGRESQL
 
         // FIX 2: Tambah kolom old_data ke correction_logs
         // Kolom ini diperlukan untuk menyimpan snapshot data sebelum koreksi
@@ -41,12 +36,7 @@ return new class extends Migration
     public function down(): void
     {
         // Rollback: hapus 'voided' dari enum
-        DB::statement("
-            ALTER TABLE hash_verifications 
-            MODIFY COLUMN status 
-            ENUM('pending','verified','fraud_detected') 
-            NOT NULL DEFAULT 'pending'
-        ");
+        // DB::statement("..."); // DIHAPUS KARENA TIDAK KOMPATIBEL DENGAN POSTGRESQL
 
         // Rollback: hapus kolom old_data
         Schema::table('correction_logs', function (Blueprint $table) {

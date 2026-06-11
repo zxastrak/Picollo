@@ -16,40 +16,41 @@ class DashboardController extends Controller
         $user      = $request->user();
         $outletIds = $user->outlets()->pluck('outlets.id');
 
-        // Total omzet keseluruhan (transaksi success)
-        $totalOmzet = Transaction::whereIn('outlet_id', $outletIds)
-            ->where('status', 'success')
-            ->sum('total_amount');
-
-        // Hitung HPP keseluruhan
-        $totalHpp = 0;
-        $transactionIds = Transaction::whereIn('outlet_id', $outletIds)
-            ->where('status', 'success')
-            ->pluck('id');
-            
-        if ($transactionIds->isNotEmpty()) {
-            $totalHpp = DB::table('transaction_items')
-                ->join('transactions', 'transaction_items.transaction_id', '=', 'transactions.id')
-                ->leftJoin('outlet_product', function ($join) {
-                    $join->on('outlet_product.outlet_id', '=', 'transactions.outlet_id')
-                         ->on('outlet_product.product_id', '=', 'transaction_items.product_id');
-                })
-                ->leftJoin('products', 'products.id', '=', 'transaction_items.product_id')
-                ->whereIn('transactions.id', $transactionIds)
-                ->selectRaw('SUM(transaction_items.qty * COALESCE(outlet_product.modal, products.modal, 0)) as total_hpp')
-                ->value('total_hpp') ?? 0;
-        }
-        $totalPendapatan = $totalOmzet - $totalHpp;
-
         // Timezone-aware local day boundaries (Asia/Jakarta)
         $startOfDay = now('Asia/Jakarta')->startOfDay()->utc();
-        $endOfDay = now('Asia/Jakarta')->endOfDay()->utc();
+        $endOfDay   = now('Asia/Jakarta')->endOfDay()->utc();
 
-        // FIX: Total transaksi hari ini — hanya status success agar konsisten dengan pendapatan
-        $transaksiHariIni = Transaction::whereIn('outlet_id', $outletIds)
+        // 1. Menggabungkan Perhitungan Statistik Transaksi (Total & Hari Ini) dalam 1 Query
+        $transactionStats = Transaction::whereIn('outlet_id', $outletIds)
             ->where('status', 'success')
-            ->whereBetween('created_at', [$startOfDay, $endOfDay])
-            ->count();
+            ->selectRaw('SUM(total_amount) as total_omzet')
+            ->selectRaw('COUNT(CASE WHEN created_at BETWEEN ? AND ? THEN 1 END) as transaksi_hari_ini', [$startOfDay, $endOfDay])
+            ->selectRaw('SUM(CASE WHEN created_at BETWEEN ? AND ? THEN total_amount ELSE 0 END) as omzet_hari_ini', [$startOfDay, $endOfDay])
+            ->first();
+
+        $totalOmzet       = (float) ($transactionStats->total_omzet ?? 0);
+        $transaksiHariIni = (int) ($transactionStats->transaksi_hari_ini ?? 0);
+        $omzetHariIni     = (float) ($transactionStats->omzet_hari_ini ?? 0);
+
+        // 2. Menggabungkan Perhitungan HPP (Total & Hari Ini) dalam 1 Query (Tanpa pluck IDs)
+        $hppStats = DB::table('transaction_items')
+            ->join('transactions', 'transaction_items.transaction_id', '=', 'transactions.id')
+            ->leftJoin('outlet_product', function ($join) {
+                $join->on('outlet_product.outlet_id', '=', 'transactions.outlet_id')
+                     ->on('outlet_product.product_id', '=', 'transaction_items.product_id');
+            })
+            ->leftJoin('products', 'products.id', '=', 'transaction_items.product_id')
+            ->whereIn('transactions.outlet_id', $outletIds)
+            ->where('transactions.status', 'success')
+            ->selectRaw('SUM(transaction_items.qty * COALESCE(outlet_product.modal, products.modal, 0)) as total_hpp')
+            ->selectRaw('SUM(CASE WHEN transactions.created_at BETWEEN ? AND ? THEN transaction_items.qty * COALESCE(outlet_product.modal, products.modal, 0) ELSE 0 END) as today_hpp', [$startOfDay, $endOfDay])
+            ->first();
+
+        $totalHpp = (float) ($hppStats->total_hpp ?? 0);
+        $todayHpp = (float) ($hppStats->today_hpp ?? 0);
+
+        $totalPendapatan   = $totalOmzet - $totalHpp;
+        $pendapatanHariIni = $omzetHariIni - $todayHpp;
 
         // Total produk aktif
         $totalProdukAktif = Product::whereHas('outlets', function ($q) use ($outletIds) {
@@ -60,33 +61,6 @@ class DashboardController extends Controller
         $totalOutletAktif = Outlet::whereIn('id', $outletIds)
             ->where('status', 'aktif')
             ->count();
-
-        // Omzet hari ini
-        $omzetHariIni = Transaction::whereIn('outlet_id', $outletIds)
-            ->where('status', 'success')
-            ->whereBetween('created_at', [$startOfDay, $endOfDay])
-            ->sum('total_amount');
-
-        // Hitung HPP hari ini
-        $todayTransactionIds = Transaction::whereIn('outlet_id', $outletIds)
-            ->where('status', 'success')
-            ->whereBetween('created_at', [$startOfDay, $endOfDay])
-            ->pluck('id');
-
-        $todayHpp = 0;
-        if ($todayTransactionIds->isNotEmpty()) {
-            $todayHpp = DB::table('transaction_items')
-                ->join('transactions', 'transaction_items.transaction_id', '=', 'transactions.id')
-                ->leftJoin('outlet_product', function ($join) {
-                    $join->on('outlet_product.outlet_id', '=', 'transactions.outlet_id')
-                         ->on('outlet_product.product_id', '=', 'transaction_items.product_id');
-                })
-                ->leftJoin('products', 'products.id', '=', 'transaction_items.product_id')
-                ->whereIn('transactions.id', $todayTransactionIds)
-                ->selectRaw('SUM(transaction_items.qty * COALESCE(outlet_product.modal, products.modal, 0)) as total_hpp')
-                ->value('total_hpp') ?? 0;
-        }
-        $pendapatanHariIni = $omzetHariIni - $todayHpp;
 
         // Estimasi pendapatan dari stok yang ada
         $estimasiPendapatan = DB::table('outlet_product')
@@ -122,7 +96,7 @@ class DashboardController extends Controller
 
         if ($period === 'hari_ini') {
             $grafikPendapatan = $grafikQuery->select(
-                DB::raw('DATE_FORMAT(created_at, "%H:00") as tanggal'),
+                DB::raw("TO_CHAR(created_at, 'HH24:00') as tanggal"),
                 DB::raw('SUM(total_amount) as total'),
                 DB::raw('COUNT(*) as jumlah_transaksi')
             )
@@ -131,7 +105,7 @@ class DashboardController extends Controller
             ->get();
         } elseif ($period === 'tahun') {
             $grafikPendapatan = $grafikQuery->select(
-                DB::raw('DATE_FORMAT(created_at, "%Y-%m") as tanggal'),
+                DB::raw("TO_CHAR(created_at, 'YYYY-MM') as tanggal"),
                 DB::raw('SUM(total_amount) as total'),
                 DB::raw('COUNT(*) as jumlah_transaksi')
             )
@@ -140,7 +114,7 @@ class DashboardController extends Controller
             ->get();
         } else {
             $grafikPendapatan = $grafikQuery->select(
-                DB::raw('DATE(created_at) as tanggal'),
+                DB::raw('created_at::date as tanggal'),
                 DB::raw('SUM(total_amount) as total'),
                 DB::raw('COUNT(*) as jumlah_transaksi')
             )

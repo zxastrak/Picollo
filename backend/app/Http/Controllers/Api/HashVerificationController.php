@@ -100,7 +100,7 @@ class HashVerificationController extends Controller
             $prevHash,
         ]);
 
-        $recomputed = hash('sha256', $signature);
+        $recomputed = hash_hmac('sha256', $signature, config('app.key'));
         $storedHash = $transaction->hashVerification->hash_sha256;
         $isValid    = hash_equals($storedHash, $recomputed);
         $status     = $isValid ? 'verified' : 'fraud_detected';
@@ -191,7 +191,7 @@ class HashVerificationController extends Controller
                 $trx->created_at->timestamp,
                 $currentPrev,
             ]);
-            $recomputed = hash('sha256', $signature);
+            $recomputed = hash_hmac('sha256', $signature, config('app.key'));
 
             // 1. Cek integritas data (hash cocok dengan snapshot)
             $isDataValid = !empty($storedHash) && hash_equals($storedHash, $recomputed);
@@ -258,11 +258,12 @@ class HashVerificationController extends Controller
             $transaction->transaction_code,
             $transaction->outlet_id,
             $transaction->total_amount,
+            $transaction->metode_pembayaran,
             $transaction->created_at->timestamp,
             $prevHash,
         ]);
 
-        $recomputed = hash('sha256', $signature);
+        $recomputed = hash_hmac('sha256', $signature, config('app.key'));
         $isValid = hash_equals($verification->hash_sha256, $recomputed);
         $status = $isValid ? 'verified' : 'fraud_detected';
 

@@ -129,17 +129,22 @@ class TransactionController extends Controller
             $totalAmount = 0;
             $itemsData   = [];
 
+            // 1. Ambil semua produk dalam 1 query untuk menghindari N+1 (Pessimistic Lock)
+            $productIds = collect($request->items)->pluck('product_id')->unique()->toArray();
+            $products = Product::whereIn('id', $productIds)
+                ->whereHas('outlets', function($q) use ($request) {
+                    $q->where('outlets.id', $request->outlet_id);
+                })
+                ->with(['outlets' => function($q) use ($request) {
+                    $q->where('outlets.id', $request->outlet_id);
+                }])
+                ->where('is_active', true)
+                ->lockForUpdate() // Cegah race condition stok
+                ->get()
+                ->keyBy('id');
+
             foreach ($request->items as $item) {
-                $product = Product::where('id', $item['product_id'])
-                    ->whereHas('outlets', function($q) use ($request) {
-                        $q->where('outlets.id', $request->outlet_id);
-                    })
-                    ->with(['outlets' => function($q) use ($request) {
-                        $q->where('outlets.id', $request->outlet_id);
-                    }])
-                    ->where('is_active', true)
-                    ->lockForUpdate() // Cegah race condition stok (lock produk master)
-                    ->first();
+                $product = $products->get($item['product_id']);
 
                 if (!$product) {
                     DB::rollBack();
@@ -202,11 +207,16 @@ class TransactionController extends Controller
                 'catatan'           => $request->catatan,
             ]);
 
+            // Bulk Insert untuk Item Transaksi agar menghemat query
+            $insertData = [];
+            $now = now();
             foreach ($itemsData as $item) {
-                TransactionItem::create(array_merge($item, [
-                    'transaction_id' => $transaction->id,
-                ]));
+                $item['transaction_id'] = $transaction->id;
+                $item['created_at']     = $now;
+                $item['updated_at']     = $now;
+                $insertData[] = $item;
             }
+            TransactionItem::insert($insertData);
 
             // Ambil previous_hash dari transaksi sukses terakhir di outlet yang sama
             $previousHash = HashVerification::whereHas('transaction', function ($q) use ($request) {
@@ -226,7 +236,7 @@ class TransactionController extends Controller
                 $previousHash ?? '',
             ]);
 
-            $hash = hash('sha256', $signature);
+            $hash = hash_hmac('sha256', $signature, config('app.key'));
 
             HashVerification::create([
                 'transaction_id' => $transaction->id,

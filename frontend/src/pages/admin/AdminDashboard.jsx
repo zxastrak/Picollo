@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react'
+import { Link } from 'react-router-dom'
 import Layout from '../../components/Layout'
 import {
   AreaChart, Area, XAxis, YAxis, CartesianGrid,
@@ -241,9 +242,9 @@ export default function AdminDashboard() {
         <div className="bg-white rounded-2xl border border-zinc-200 overflow-hidden">
           <div className="flex items-center justify-between px-5 py-4 border-b border-zinc-100">
             <h3 className="font-bold text-zinc-900 text-sm">Status Outlet</h3>
-            <a href="/admin/outlet" className="text-yellow-600 text-xs font-semibold hover:underline">
+            <Link to="/admin/outlet" className="text-yellow-600 text-xs font-semibold hover:underline">
               Kelola →
-            </a>
+            </Link>
           </div>
           <div className="divide-y divide-zinc-50">
             {loading ? (
