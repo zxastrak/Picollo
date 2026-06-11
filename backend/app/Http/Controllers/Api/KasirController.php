@@ -31,6 +31,7 @@ class KasirController extends Controller
                 'last_login_at' => $k->last_login_at,
                 'outlets'       => $k->outlets,
                 'created_at'    => $k->created_at,
+                'avatar_url'    => $k->avatar_url,
             ]);
 
         return response()->json([

@@ -96,7 +96,7 @@ class DashboardController extends Controller
 
         if ($period === 'hari_ini') {
             $grafikPendapatan = $grafikQuery->select(
-                DB::raw("TO_CHAR(created_at, 'HH24:00') as tanggal"),
+                DB::raw("DATE_FORMAT(created_at, '%H:00') as tanggal"),
                 DB::raw('SUM(total_amount) as total'),
                 DB::raw('COUNT(*) as jumlah_transaksi')
             )
@@ -105,7 +105,7 @@ class DashboardController extends Controller
             ->get();
         } elseif ($period === 'tahun') {
             $grafikPendapatan = $grafikQuery->select(
-                DB::raw("TO_CHAR(created_at, 'YYYY-MM') as tanggal"),
+                DB::raw("DATE_FORMAT(created_at, '%Y-%m') as tanggal"),
                 DB::raw('SUM(total_amount) as total'),
                 DB::raw('COUNT(*) as jumlah_transaksi')
             )
@@ -114,7 +114,7 @@ class DashboardController extends Controller
             ->get();
         } else {
             $grafikPendapatan = $grafikQuery->select(
-                DB::raw('created_at::date as tanggal'),
+                DB::raw('DATE(created_at) as tanggal'),
                 DB::raw('SUM(total_amount) as total'),
                 DB::raw('COUNT(*) as jumlah_transaksi')
             )

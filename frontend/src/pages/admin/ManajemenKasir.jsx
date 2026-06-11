@@ -496,6 +496,7 @@ export default function AdminManajemenKasir() {
         total_transaksi: k.total_transaksi || 0,
         status: k.is_active ? 'aktif' : 'nonaktif',
         password_plain: '',
+        foto: k.avatar_url,
       }))
       setData(mappedKasir)
     } catch {
