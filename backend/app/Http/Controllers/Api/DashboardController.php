@@ -94,9 +94,15 @@ class DashboardController extends Controller
             ->where('status', 'success')
             ->whereBetween('created_at', [$startDate, $endDate]);
 
+        $driver = DB::connection()->getDriverName();
+
         if ($period === 'hari_ini') {
+            $dateSelect = $driver === 'pgsql' 
+                ? DB::raw("TO_CHAR(created_at, 'HH24:00') as tanggal")
+                : DB::raw("DATE_FORMAT(created_at, '%H:00') as tanggal");
+
             $grafikPendapatan = $grafikQuery->select(
-                DB::raw("DATE_FORMAT(created_at, '%H:00') as tanggal"),
+                $dateSelect,
                 DB::raw('SUM(total_amount) as total'),
                 DB::raw('COUNT(*) as jumlah_transaksi')
             )
@@ -104,8 +110,12 @@ class DashboardController extends Controller
             ->orderBy('tanggal')
             ->get();
         } elseif ($period === 'tahun') {
+            $dateSelect = $driver === 'pgsql' 
+                ? DB::raw("TO_CHAR(created_at, 'YYYY-MM') as tanggal")
+                : DB::raw("DATE_FORMAT(created_at, '%Y-%m') as tanggal");
+
             $grafikPendapatan = $grafikQuery->select(
-                DB::raw("DATE_FORMAT(created_at, '%Y-%m') as tanggal"),
+                $dateSelect,
                 DB::raw('SUM(total_amount) as total'),
                 DB::raw('COUNT(*) as jumlah_transaksi')
             )
@@ -113,8 +123,12 @@ class DashboardController extends Controller
             ->orderBy('tanggal')
             ->get();
         } else {
+            $dateSelect = $driver === 'pgsql' 
+                ? DB::raw("created_at::date as tanggal")
+                : DB::raw("DATE(created_at) as tanggal");
+
             $grafikPendapatan = $grafikQuery->select(
-                DB::raw('DATE(created_at) as tanggal'),
+                $dateSelect,
                 DB::raw('SUM(total_amount) as total'),
                 DB::raw('COUNT(*) as jumlah_transaksi')
             )
