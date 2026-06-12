@@ -15,12 +15,20 @@ export default function KasirDashboard() {
   async function fetchData() {
     setLoading(true)
     try {
-      const res = await transaksiService.getAll()
-      const allTx = res.data.data?.data || res.data.data || []
+      // Ambil seluruh transaksi
+      const res = await transaksiService.getAll({ all: true })
+      const rawTx = res.data.data?.data || res.data.data || []
       
-      // Filter transaksi hari ini
-      const today = new Date().toISOString().split('T')[0]
-      const todayTx = allTx.filter(tx => tx.created_at?.startsWith(today))
+      // Abaikan transaksi yang berstatus voided di sisi kasir (hanya tampil di log pembatalan admin)
+      const allTx = rawTx.filter(tx => tx.status !== 'voided')
+      
+      // Filter transaksi hari ini berdasarkan tanggal lokal
+      const todayLocal = new Date().toLocaleDateString('sv-SE')
+      const todayTx = allTx.filter(tx => {
+        if (!tx.created_at) return false
+        const txDate = new Date(tx.created_at).toLocaleDateString('sv-SE')
+        return txDate === todayLocal
+      })
       
       const totalOmzet = todayTx.reduce((sum, tx) => sum + (Number(tx.total_amount) || 0), 0)
       const qrisCount = todayTx.filter(tx => tx.metode_pembayaran === 'qris').length

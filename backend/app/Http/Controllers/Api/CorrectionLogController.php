@@ -44,126 +44,193 @@ class CorrectionLogController extends Controller
         return response()->json(['success' => true, 'data' => $query->paginate(15)]);
     }
 
-    // POST buat koreksi baru (Edit atau Void)
+    // POST buat koreksi baru (Edit atau Void atau Edit Items)
     public function store(Request $request)
     {
         $validator = Validator::make($request->all(), [
-            'transaction_id'  => 'required|integer|exists:transactions,id',
-            'alasan'          => 'required|string',
-            'correction_type' => 'required|in:edit,void,edit_items',
-            'new_data'        => 'required_if:correction_type,edit|array',
-            'removed_item_ids'=> 'required_if:correction_type,edit_items|array',
-            'removed_item_ids.*' => 'integer|exists:transaction_items,id',
+            'transaction_id'    => 'required|integer|exists:transactions,id',
+            'alasan'            => 'required|string',
+            'correction_type'   => 'required|in:edit,void,edit_items',
+            'metode_pembayaran' => 'nullable|string|in:qris,tunai,transfer',
+            'new_data'          => 'required_if:correction_type,edit|array',
+            'items'             => 'required_if:correction_type,edit_items|array',
+            'items.*.product_id'=> 'required_with:items|integer|exists:products,id',
+            'items.*.qty'       => 'required_with:items|integer|min:1',
         ]);
 
         if ($validator->fails()) {
             return response()->json(['success' => false, 'errors' => $validator->errors()], 422);
         }
 
-        return DB::transaction(function () use ($request) {
-            $user      = $request->user();
-            $outletIds = $user->outlets()->pluck('outlets.id');
+        try {
+            return DB::transaction(function () use ($request) {
+                $user      = $request->user();
+                $outletIds = $user->outlets()->pluck('outlets.id');
 
-            /** @var Transaction $transaction */
-            $transaction = Transaction::whereIn('outlet_id', $outletIds)
-                ->with('hashVerification')
-                ->lockForUpdate()
-                ->find($request->transaction_id);
+                /** @var Transaction $transaction */
+                $transaction = Transaction::whereIn('outlet_id', $outletIds)
+                    ->with(['hashVerification', 'items'])
+                    ->lockForUpdate()
+                    ->find($request->transaction_id);
 
-            if (!$transaction) {
-                return response()->json([
-                    'success' => false,
-                    'message' => 'Transaksi tidak ditemukan.',
-                ], 404);
-            }
-
-            // FIX: Kasir hanya bisa koreksi transaksi milik sendiri
-            if ($user->hasRole('kasir') && $transaction->user_id !== $user->id) {
-                return response()->json([
-                    'success' => false,
-                    'message' => 'Anda hanya bisa melakukan koreksi pada transaksi milik Anda sendiri.',
-                ], 403);
-            }
-
-            // Cegah koreksi transaksi yang sudah voided
-            if ($transaction->status === 'voided') {
-                return response()->json([
-                    'success' => false,
-                    'message' => 'Transaksi ini sudah dalam status voided dan tidak bisa dikoreksi lagi.',
-                ], 422);
-            }
-
-            $oldData          = $transaction->toArray();
-            $hashVerification = $transaction->hashVerification;
-            $hashSebelum      = $hashVerification?->hash_sha256;
-
-            if ($request->correction_type === 'void') {
-                // FIX: Kembalikan stok produk ke tabel outlet_product
-                $items = $transaction->items()->get();
-                foreach ($items as $item) {
-                    if ($item->product_id) {
-                        DB::table('outlet_product')
-                            ->where('outlet_id', $transaction->outlet_id)
-                            ->where('product_id', $item->product_id)
-                            ->increment('stok', $item->qty);
-                    }
-                }
-
-                // Void: ubah status transaksi
-                $transaction->update(['status' => 'voided']);
-                $hashSesudah = $hashSebelum;
-
-                if ($hashVerification) {
-                    // FIX: Gunakan status yang valid di DB enum
-                    // Perlu ALTER TABLE atau gunakan 'fraud_detected' sebagai penanda,
-                    // atau tambahkan 'voided' ke enum (lihat migration fix).
-                    // Solusi: update status ke 'fraud_detected' dengan catatan di DB,
-                    // atau jalankan migration untuk tambah enum 'voided'.
-                    // Kode ini mengasumsikan migration sudah dijalankan (lihat file migration fix).
-                    $hashVerification->update(['status' => 'voided']);
-                }
-
-                // FIX CRITICAL: Perbarui previous_hash di transaksi berikutnya dalam chain
-                // agar chain yang tersisa tetap valid
-                $this->repairChainAfterVoid($transaction, $hashVerification);
-
-            } elseif ($request->correction_type === 'edit_items') {
-                $removedIds = $request->removed_item_ids ?? [];
-                $itemsToRemove = $transaction->items()->whereIn('id', $removedIds)->get();
-
-                if ($itemsToRemove->isEmpty()) {
+                if (!$transaction) {
                     return response()->json([
                         'success' => false,
-                        'message' => 'Tidak ada item yang valid untuk dihapus.',
+                        'message' => 'Transaksi tidak ditemukan.',
+                    ], 404);
+                }
+
+                // FIX: Kasir hanya bisa koreksi transaksi milik sendiri
+                if ($user->hasRole('kasir') && $transaction->user_id !== $user->id) {
+                    return response()->json([
+                        'success' => false,
+                        'message' => 'Anda hanya bisa melakukan koreksi pada transaksi milik Anda sendiri.',
+                    ], 403);
+                }
+
+                // Maksimal koreksi adalah 1 kali per transaksi
+                $hasCorrection = CorrectionLog::where('transaction_id', $transaction->id)->exists();
+                if ($hasCorrection) {
+                    return response()->json([
+                        'success' => false,
+                        'message' => 'Transaksi ini sudah pernah dikoreksi sebelumnya. Maksimal koreksi adalah 1 kali.',
                     ], 422);
                 }
 
-                $totalItemsCount = $transaction->items()->count();
-                $isRemovingAll = ($itemsToRemove->count() === $totalItemsCount);
-
-                // Kembalikan stok
-                foreach ($itemsToRemove as $item) {
-                    if ($item->product_id) {
-                        DB::table('outlet_product')
-                            ->where('outlet_id', $transaction->outlet_id)
-                            ->where('product_id', $item->product_id)
-                            ->increment('stok', $item->qty);
-                    }
-                    $item->delete(); // Hapus item dari transaksi
+                // Cegah koreksi transaksi yang sudah voided
+                if ($transaction->status === 'voided') {
+                    return response()->json([
+                        'success' => false,
+                        'message' => 'Transaksi ini sudah dalam status voided dan tidak bisa dikoreksi lagi.',
+                    ], 422);
                 }
 
-                if ($isRemovingAll) {
-                    $transaction->update(['status' => 'voided', 'total_amount' => 0]);
+                $oldData          = $transaction->toArray();
+                $hashVerification = $transaction->hashVerification;
+                $hashSebelum      = $hashVerification?->hash_sha256;
+                $hashSesudah      = $hashSebelum;
+
+                if ($request->correction_type === 'void') {
+                    // FIX: Kembalikan stok produk ke tabel outlet_product
+                    $items = $transaction->items;
+                    foreach ($items as $item) {
+                        if ($item->product_id) {
+                            DB::table('outlet_product')
+                                ->where('outlet_id', $transaction->outlet_id)
+                                ->where('product_id', $item->product_id)
+                                ->increment('stok', $item->qty);
+                        }
+                    }
+
+                    // Void: ubah status transaksi
+                    $transaction->update(['status' => 'voided']);
                     $hashSesudah = $hashSebelum;
+
                     if ($hashVerification) {
                         $hashVerification->update(['status' => 'voided']);
                     }
+
+                    // FIX CRITICAL: Perbarui previous_hash di transaksi berikutnya dalam chain
                     $this->repairChainAfterVoid($transaction, $hashVerification);
-                } else {
+
+                } elseif ($request->correction_type === 'edit_items') {
+                    // Update metode pembayaran jika dikirim
+                    if ($request->filled('metode_pembayaran')) {
+                        $transaction->update(['metode_pembayaran' => $request->metode_pembayaran]);
+                    }
+
+                    $oldItems = $transaction->items; // Collection
+                    $newItems = $request->items ?? [];
+                    $newProductIds = collect($newItems)->pluck('product_id')->toArray();
+
+                    // 1. Kembalikan stok untuk item yang dihapus sepenuhnya dari list baru
+                    foreach ($oldItems as $oldItem) {
+                        if (!in_array($oldItem->product_id, $newProductIds)) {
+                            if ($oldItem->product_id) {
+                                DB::table('outlet_product')
+                                    ->where('outlet_id', $transaction->outlet_id)
+                                    ->where('product_id', $oldItem->product_id)
+                                    ->increment('stok', $oldItem->qty);
+                            }
+                            $oldItem->delete();
+                        }
+                    }
+
+                    // 2. Proses item baru atau update qty
+                    foreach ($newItems as $item) {
+                        $oldItem = $oldItems->firstWhere('product_id', $item['product_id']);
+                        
+                        if ($oldItem) {
+                            // Update qty & subtotal
+                            $diff = $item['qty'] - $oldItem->qty;
+                            if ($diff !== 0) {
+                                // Cek stok jika qty bertambah
+                                if ($diff > 0) {
+                                    $outletProduct = DB::table('outlet_product')
+                                        ->where('outlet_id', $transaction->outlet_id)
+                                        ->where('product_id', $item['product_id'])
+                                        ->first();
+                                    if ($outletProduct && $outletProduct->stok < $diff) {
+                                        throw new \Exception("Stok produk {$oldItem->nama_produk} tidak mencukupi (Sisa stok outlet: {$outletProduct->stok}, tambahan yang diminta: {$diff}).", 422);
+                                    }
+                                }
+                                
+                                // Sesuaikan stok
+                                DB::table('outlet_product')
+                                    ->where('outlet_id', $transaction->outlet_id)
+                                    ->where('product_id', $item['product_id'])
+                                    ->decrement('stok', $diff);
+
+                                $oldItem->update([
+                                    'qty' => $item['qty'],
+                                    'subtotal' => $item['qty'] * $oldItem->harga_satuan
+                                ]);
+                            }
+                        } else {
+                            // Tambah item baru
+                            $product = Product::where('id', $item['product_id'])
+                                ->whereHas('outlets', fn($q) => $q->where('outlets.id', $transaction->outlet_id))
+                                ->with(['outlets' => fn($q) => $q->where('outlets.id', $transaction->outlet_id)])
+                                ->first();
+                            
+                            if (!$product) {
+                                throw new \Exception("Produk ID {$item['product_id']} tidak ditemukan di outlet ini.", 422);
+                            }
+
+                            $pivot = $product->outlets->first()->pivot;
+                            if ($pivot->stok < $item['qty']) {
+                                throw new \Exception("Stok produk {$product->nama} tidak mencukupi (Sisa: {$pivot->stok}).", 422);
+                            }
+
+                            // Kurangi stok
+                            DB::table('outlet_product')
+                                ->where('outlet_id', $transaction->outlet_id)
+                                ->where('product_id', $product->id)
+                                ->decrement('stok', $item['qty']);
+
+                            $hargaAkhir = $pivot->harga !== null ? $pivot->harga : $product->harga;
+                            $modalAkhir = $pivot->modal !== null ? $pivot->modal : ($product->modal ?? 0);
+                            $subtotal = $hargaAkhir * $item['qty'];
+
+                            \App\Models\TransactionItem::create([
+                                'transaction_id' => $transaction->id,
+                                'product_id'     => $product->id,
+                                'nama_produk'    => $product->nama,
+                                'harga_satuan'   => $hargaAkhir,
+                                'modal_satuan'   => $modalAkhir,
+                                'qty'            => $item['qty'],
+                                'subtotal'       => $subtotal,
+                            ]);
+                        }
+                    }
+
+                    // 3. Recalculate total_amount
+                    $transaction->refresh();
                     $newTotal = $transaction->items()->sum('subtotal');
                     $transaction->update(['total_amount' => $newTotal]);
                     $transaction->refresh();
 
+                    // 4. Update blockchain hash
                     $prevHash = $hashVerification?->previous_hash ?? '';
                     $signature = implode('|', [
                         $transaction->transaction_code,
@@ -182,73 +249,79 @@ class CorrectionLogController extends Controller
                         ]);
                         $this->repairChainAfterEdit($transaction, $hashSesudah);
                     }
-                }
-            } else {
-                // Edit: hanya field yang diizinkan yang boleh diubah
-                $safeData = array_intersect_key(
-                    $request->new_data,
-                    array_flip(self::ALLOWED_EDIT_FIELDS)
-                );
+                } else {
+                    // Edit: hanya field yang diizinkan yang boleh diubah
+                    $safeData = array_intersect_key(
+                        $request->new_data,
+                        array_flip(self::ALLOWED_EDIT_FIELDS)
+                    );
 
-                if (empty($safeData)) {
-                    return response()->json([
-                        'success' => false,
-                        'message' => 'Tidak ada field yang valid untuk diubah. Field yang diizinkan: ' . implode(', ', self::ALLOWED_EDIT_FIELDS),
-                    ], 422);
-                }
+                    if (empty($safeData)) {
+                        return response()->json([
+                            'success' => false,
+                            'message' => 'Tidak ada field yang valid untuk diubah. Field yang diizinkan: ' . implode(', ', self::ALLOWED_EDIT_FIELDS),
+                        ], 422);
+                    }
 
-                $transaction->update($safeData);
-                $transaction->refresh();
+                    $transaction->update($safeData);
+                    $transaction->refresh();
 
-                $prevHash = $hashVerification?->previous_hash ?? '';
+                    $prevHash = $hashVerification?->previous_hash ?? '';
 
-                $signature = implode('|', [
-                    $transaction->transaction_code,
-                    $transaction->outlet_id,
-                    $transaction->total_amount,
-                    $transaction->metode_pembayaran,
-                    $transaction->created_at->timestamp,
-                    $prevHash,
-                ]);
-                $hashSesudah = hash('sha256', $signature);
-
-                if ($hashVerification) {
-                    $hashVerification->update([
-                        'hash_sha256' => $hashSesudah,
-                        'status'      => 'verified',
+                    $signature = implode('|', [
+                        $transaction->transaction_code,
+                        $transaction->outlet_id,
+                        $transaction->total_amount,
+                        $transaction->metode_pembayaran,
+                        $transaction->created_at->timestamp,
+                        $prevHash,
                     ]);
+                    $hashSesudah = hash('sha256', $signature);
 
-                    // FIX CRITICAL: Perbarui previous_hash di transaksi berikutnya dalam chain
-                    // karena hash transaksi ini sudah berubah
-                    $this->repairChainAfterEdit($transaction, $hashSesudah);
+                    if ($hashVerification) {
+                        $hashVerification->update([
+                            'hash_sha256' => $hashSesudah,
+                            'status'      => 'verified',
+                        ]);
+
+                        // FIX CRITICAL: Perbarui previous_hash di transaksi berikutnya dalam chain
+                        $this->repairChainAfterEdit($transaction, $hashSesudah);
+                    }
                 }
-            }
 
-            $fraudService = app(\App\Services\FraudDetectionService::class);
-            $fraudIndicators = $fraudService->analyzeCorrection($transaction, $user->id);
-            $isSuspicious = !empty($fraudIndicators);
+                $fraudService = app(\App\Services\FraudDetectionService::class);
+                $fraudIndicators = $fraudService->analyzeCorrection($transaction, $user->id);
+                $isSuspicious = !empty($fraudIndicators);
 
-            $log = CorrectionLog::create([
-                'transaction_id'  => $transaction->id,
-                'corrected_by'    => $user->id,
-                'outlet_id'       => $transaction->outlet_id,
-                'alasan'          => $request->alasan,
-                'old_data'        => $oldData,  // kolom ini harus ada di DB — lihat migration fix
-                'new_data'        => $transaction->fresh()->toArray(),
-                'correction_type' => $request->correction_type,
-                'hash_sebelum'    => $hashSebelum,
-                'hash_sesudah'    => $hashSesudah,
-                'status'          => 'flagged',
-                'is_suspicious'   => $isSuspicious,
-                'fraud_indicators'=> $isSuspicious ? $fraudIndicators : null,
-            ]);
+                $log = CorrectionLog::create([
+                    'transaction_id'  => $transaction->id,
+                    'corrected_by'    => $user->id,
+                    'outlet_id'       => $transaction->outlet_id,
+                    'alasan'          => $request->alasan,
+                    'old_data'        => $oldData,
+                    'new_data'        => $transaction->fresh(['items'])->toArray(),
+                    'correction_type' => $request->correction_type,
+                    'hash_sebelum'    => $hashSebelum,
+                    'hash_sesudah'    => $hashSesudah,
+                    'status'          => 'flagged',
+                    'is_suspicious'   => $isSuspicious,
+                    'fraud_indicators'=> $isSuspicious ? $fraudIndicators : null,
+                ]);
 
+                return response()->json([
+                    'success' => true,
+                    'message' => 'Koreksi berhasil dicatat.',
+                    'data'    => $log->load(['transaction:id,transaction_code', 'correctedBy:id,name']),
+                ], 201);
+            });
+        } catch (\Exception $e) {
+            DB::rollBack();
+            $code = $e->getCode() === 422 ? 422 : 500;
             return response()->json([
-                'success' => true,
-                'message' => 'Koreksi berhasil dicatat.',
-                'data'    => $log->load(['transaction:id,transaction_code', 'correctedBy:id,name']),
-            ], 201);
-        });
+                'success' => false,
+                'message' => $e->getMessage(),
+            ], $code);
+        }
     }
 
     /**

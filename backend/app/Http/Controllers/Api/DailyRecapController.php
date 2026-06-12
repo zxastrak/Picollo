@@ -117,6 +117,12 @@ class DailyRecapController extends Controller
         $totalQris      = $transaksi->where('metode_pembayaran', 'qris')->sum('total_amount');
         $totalTunai     = $transaksi->where('metode_pembayaran', 'tunai')->sum('total_amount');
 
+        $transaksiVoid = Transaction::where('outlet_id', $request->outlet_id)
+            ->where('status', 'voided')
+            ->whereDate('created_at', $request->tanggal)
+            ->get();
+        $totalVoid = $transaksiVoid->count();
+
         // Ambil hash rekap hari sebelumnya untuk membentuk chain antar hari
         // Gunakan tanggal < tanggal yang disubmit agar tidak ambil rekap hari yang sama
         $previousHash = DailyRecap::where('outlet_id', $request->outlet_id)
@@ -124,12 +130,13 @@ class DailyRecapController extends Controller
             ->orderByDesc('tanggal')
             ->value('hash_rekap');
 
-        // Susun signature: Outlet|Tanggal|Amount|TotalTrx|PrevHash
+        // Susun signature: Outlet|Tanggal|Amount|TotalTrx|TotalVoid|PrevHash
         $signature = implode('|', [
             $request->outlet_id,
             $request->tanggal,
             $totalAmount,
             $totalTransaksi,
+            $totalVoid,
             $previousHash ?? 'FIRST_RECAP',
         ]);
 
@@ -140,6 +147,7 @@ class DailyRecapController extends Controller
             'user_id'         => $request->user()->id,
             'tanggal'         => $request->tanggal,
             'total_transaksi' => $totalTransaksi,
+            'total_void'      => $totalVoid,
             'total_amount'    => $totalAmount,
             'total_qris'      => $totalQris,
             'total_tunai'     => $totalTunai,

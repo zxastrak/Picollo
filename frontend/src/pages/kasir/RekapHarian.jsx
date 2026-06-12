@@ -6,6 +6,7 @@ import { logKoreksiService } from '../../services/logKoreksiService'
 import { laporanService } from '../../services/laporanService'
 import useAuthStore from '../../store/authStore'
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend } from 'recharts'
+import { productService } from '../../services/produkService'
 
 const formatRupiah = (num) => {
   if (!num && num !== 0) return '-'
@@ -13,17 +14,43 @@ const formatRupiah = (num) => {
 }
 
 // ── Modal Koreksi ──
-function ModalKoreksi({ transaksi, onClose, onSuccess }) {
+function ModalKoreksi({ transaksi, onClose, onSuccess, showToast }) {
   const [alasan, setAlasan] = useState('')
   const [metode, setMetode] = useState(transaksi.raw_metode || 'qris')
-  const [catatan, setCatatan] = useState(transaksi.raw_catatan || '')
-  const [ref, setRef] = useState(transaksi.raw_reference || '')
+  const [type, setType] = useState('edit_items') // 'edit_items' = Ganti Harga, 'void' = Pembatalan
   const [loading, setLoading] = useState(false)
+  const [items, setItems] = useState(
+    (transaksi.raw_items || []).map(item => ({
+      product_id: item.product_id,
+      nama_produk: item.nama_produk,
+      harga_satuan: Number(item.harga_satuan),
+      qty: item.qty,
+    }))
+  )
+
+  const handleIncrement = (productId) => {
+    setItems(prev => prev.map(item => item.product_id === productId ? { ...item, qty: item.qty + 1 } : item))
+  }
+
+  const handleDecrement = (productId) => {
+    setItems(prev => prev.map(item => {
+      if (item.product_id === productId) {
+        return { ...item, qty: item.qty - 1 }
+      }
+      return item
+    }).filter(item => item.qty > 0))
+  }
+
+  const estimatedTotal = items.reduce((sum, item) => sum + (item.harga_satuan * item.qty), 0)
 
   const handleSubmit = async (e) => {
     e.preventDefault()
     if (!alasan) {
-      alert('Alasan koreksi harus diisi')
+      showToast('Alasan koreksi harus diisi', 'error')
+      return
+    }
+    if (type === 'edit_items' && items.length === 0) {
+      showToast('Transaksi harus memiliki minimal 1 item, atau pilih Pembatalan', 'error')
       return
     }
     setLoading(true)
@@ -31,18 +58,20 @@ function ModalKoreksi({ transaksi, onClose, onSuccess }) {
       const payload = {
         transaction_id: transaksi.db_id,
         alasan,
-        correction_type: 'edit',
-        new_data: {
-          metode_pembayaran: metode,
-          catatan,
-          payment_reference: ref,
-        }
+        correction_type: type,
+      }
+      if (type === 'edit_items') {
+        payload.metode_pembayaran = metode
+        payload.items = items.map(i => ({
+          product_id: i.product_id,
+          qty: i.qty
+        }))
       }
       await logKoreksiService.create(payload)
-      alert('Permohonan koreksi berhasil diajukan.')
+      showToast('Permohonan koreksi berhasil diajukan.', 'success')
       onSuccess()
     } catch (err) {
-      alert('Gagal mengajukan koreksi: ' + (err.response?.data?.message || err.message))
+      showToast('Gagal mengajukan koreksi: ' + (err.response?.data?.message || err.message), 'error')
     } finally {
       setLoading(false)
     }
@@ -50,8 +79,8 @@ function ModalKoreksi({ transaksi, onClose, onSuccess }) {
 
   return (
     <div className="fixed inset-0 bg-black/60 z-50 flex items-center justify-center p-4 backdrop-blur-sm">
-      <div className="bg-white rounded-3xl w-full max-w-md shadow-2xl overflow-hidden">
-        <div className="px-6 py-5 border-b border-zinc-100 flex items-center justify-between bg-zinc-50/50">
+      <div className="bg-white rounded-3xl w-full max-w-md shadow-2xl overflow-hidden max-h-[90vh] flex flex-col">
+        <div className="px-6 py-5 border-b border-zinc-100 flex items-center justify-between bg-zinc-50/50 shrink-0">
           <div>
             <h3 className="font-bold text-zinc-900 text-lg">Koreksi Data Transaksi</h3>
             <p className="text-zinc-500 text-xs mt-0.5 font-mono">No. TRX: {transaksi.id}</p>
@@ -61,38 +90,74 @@ function ModalKoreksi({ transaksi, onClose, onSuccess }) {
           </button>
         </div>
 
-        <form onSubmit={handleSubmit} className="p-6 space-y-5">
+        <form onSubmit={handleSubmit} className="p-6 space-y-4 overflow-y-auto flex-1 text-left">
           <div className="space-y-4">
             <div>
-              <label className="block text-zinc-700 text-xs font-bold mb-1.5 uppercase tracking-wide">Metode Pembayaran</label>
-              <select value={metode} onChange={e => setMetode(e.target.value)}
+              <label className="block text-zinc-700 text-xs font-bold mb-1.5 uppercase tracking-wide">Pilihan Koreksi</label>
+              <select value={type} onChange={e => setType(e.target.value)}
                 className="w-full border border-zinc-200 bg-zinc-50/50 rounded-xl px-4 py-3 text-sm focus:outline-none focus:border-yellow-400 focus:bg-white transition-all appearance-none cursor-pointer">
-                <option value="qris">QRIS</option>
-                <option value="tunai">Tunai</option>
-                <option value="transfer">Transfer</option>
+                <option value="edit_items">Ganti Harga (Ubah Metode/Item)</option>
+                <option value="void">Pembatalan (Void)</option>
               </select>
             </div>
-            <div>
-              <label className="block text-zinc-700 text-xs font-bold mb-1.5 uppercase tracking-wide">Ref Pembayaran <span className="text-zinc-400 font-normal">(Opsional)</span></label>
-              <input type="text" value={ref} onChange={e => setRef(e.target.value)}
-                className="w-full border border-zinc-200 bg-zinc-50/50 rounded-xl px-4 py-3 text-sm focus:outline-none focus:border-yellow-400 focus:bg-white transition-all"
-                placeholder="Contoh: REF-12345" />
-            </div>
-            <div>
-              <label className="block text-zinc-700 text-xs font-bold mb-1.5 uppercase tracking-wide">Catatan <span className="text-zinc-400 font-normal">(Opsional)</span></label>
-              <input type="text" value={catatan} onChange={e => setCatatan(e.target.value)}
-                className="w-full border border-zinc-200 bg-zinc-50/50 rounded-xl px-4 py-3 text-sm focus:outline-none focus:border-yellow-400 focus:bg-white transition-all"
-                placeholder="Contoh: Salah pilih metode" />
-            </div>
+            
+            {type === 'edit_items' && (
+              <>
+                <div>
+                  <label className="block text-zinc-700 text-xs font-bold mb-1.5 uppercase tracking-wide">Metode Pembayaran</label>
+                  <select value={metode} onChange={e => setMetode(e.target.value)}
+                    className="w-full border border-zinc-200 bg-zinc-50/50 rounded-xl px-4 py-3 text-sm focus:outline-none focus:border-yellow-400 focus:bg-white transition-all appearance-none cursor-pointer">
+                    <option value="qris">QRIS</option>
+                    <option value="tunai">Tunai</option>
+                  </select>
+                </div>
+
+                <div className="space-y-2">
+                  <label className="block text-zinc-700 text-xs font-bold uppercase tracking-wide">Daftar Item Transaksi</label>
+                  
+                  {items.length === 0 ? (
+                    <p className="text-xs text-red-500 italic py-2 text-center">Semua item telah dihapus. Silakan pilih opsi Pembatalan (Void).</p>
+                  ) : (
+                    <div className="space-y-2 max-h-48 overflow-y-auto pr-1 border border-zinc-100 p-2 rounded-xl bg-zinc-50/50">
+                      {items.map((item) => (
+                        <div key={item.product_id} className="flex items-center justify-between text-sm py-1.5 border-b border-zinc-100 last:border-b-0">
+                          <div className="min-w-0 flex-1">
+                            <p className="font-semibold text-zinc-800 truncate">{item.nama_produk}</p>
+                            <p className="text-xs text-zinc-400">{formatRupiah(item.harga_satuan)}</p>
+                          </div>
+                          <div className="flex items-center gap-2 shrink-0">
+                            <button type="button" onClick={() => handleDecrement(item.product_id)}
+                              className="w-6 h-6 bg-zinc-200 hover:bg-zinc-300 rounded-full flex items-center justify-center text-zinc-800 font-bold transition-colors">
+                              −
+                            </button>
+                            <span className="font-bold text-zinc-900 w-5 text-center">{item.qty}</span>
+                            <button type="button" onClick={() => handleIncrement(item.product_id)}
+                              className="w-6 h-6 bg-zinc-200 hover:bg-zinc-300 rounded-full flex items-center justify-center text-zinc-800 font-bold transition-colors">
+                              +
+                            </button>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+
+                  <div className="flex justify-between items-center text-xs font-bold bg-yellow-50 text-yellow-800 p-3 rounded-xl border border-yellow-100 mt-2">
+                    <span>Estimasi Total Baru:</span>
+                    <span className="text-sm font-extrabold">{formatRupiah(estimatedTotal)}</span>
+                  </div>
+                </div>
+              </>
+            )}
+
             <div>
               <label className="block text-zinc-700 text-xs font-bold mb-1.5 uppercase tracking-wide">Alasan Koreksi <span className="text-red-500">*</span></label>
               <textarea value={alasan} onChange={e => setAlasan(e.target.value)}
-                className="w-full border border-zinc-200 bg-zinc-50/50 rounded-xl px-4 py-3 text-sm focus:outline-none focus:border-yellow-400 focus:bg-white transition-all min-h-[100px] resize-none"
+                className="w-full border border-zinc-200 bg-zinc-50/50 rounded-xl px-4 py-3 text-sm focus:outline-none focus:border-yellow-400 focus:bg-white transition-all min-h-[80px] resize-none"
                 placeholder="Jelaskan secara detail alasan melakukan koreksi..." required />
             </div>
           </div>
 
-          <div className="flex gap-3 pt-2">
+          <div className="flex gap-3 pt-2 shrink-0">
             <button type="button" onClick={onClose} disabled={loading}
               className="flex-1 bg-zinc-100 text-zinc-700 font-bold py-3.5 rounded-xl text-sm hover:bg-zinc-200 transition-colors">
               Batal
@@ -151,6 +216,13 @@ export default function KasirRekapHarian() {
   const [sent, setSent] = useState(false)
   const [selectedKoreksi, setSelectedKoreksi] = useState(null)
   const [showConfirmKirim, setShowConfirmKirim] = useState(false)
+  const [toast, setToast] = useState(null)
+
+  const showToast = (msg, type = 'success') => {
+    setToast({ msg, type })
+    setTimeout(() => setToast(null), 3000)
+  }
+
   const { user, outlets } = useAuthStore()
   async function fetchData() {
     setLoading(true)
@@ -159,7 +231,10 @@ export default function KasirRekapHarian() {
 
       // Fetch transaksi hari ini
       const res = await transaksiService.getAll({ all: true })
-      const allTx = res.data.data?.data || res.data.data || []
+      const rawTx = res.data.data?.data || res.data.data || []
+      
+      // Abaikan transaksi yang berstatus voided di sisi kasir (hanya tampil di log pembatalan admin)
+      const allTx = rawTx.filter(tx => tx.status !== 'voided')
       
       const todayTx = allTx.filter(tx => {
         if (!tx.created_at) return false
@@ -180,28 +255,44 @@ export default function KasirRekapHarian() {
         console.error('Gagal memuat status rekap', err)
       }
 
-      // Fetch aktivitas per jam
-      try {
-        const reportRes = await laporanService.getKeuangan({
-          start_date: todayLocal,
-          end_date: todayLocal,
-          outlet_id: user?.outlet_id || outlets?.[0]?.id
+      // Hitung aktivitas per jam (00:00 - 23:59) secara lokal dari todayTx
+      const hourlyData = []
+      for (let i = 0; i < 24; i++) {
+        const hourString = String(i).padStart(2, '0') + ':00'
+        hourlyData.push({
+          jam: hourString,
+          transaksi: 0,
+          koreksi: 0
         })
-        setAktivitasPerJam(reportRes.data.data?.aktivitas_per_jam || [])
-      } catch (err) {
-        console.error('Gagal memuat aktivitas per jam', err)
       }
+
+      todayTx.forEach(tx => {
+        if (tx.created_at) {
+          const localHour = new Date(tx.created_at).getHours()
+          if (localHour >= 0 && localHour < 24) {
+            hourlyData[localHour].transaksi++
+          }
+        }
+      })
+      setAktivitasPerJam(hourlyData)
       
+      const todayVoidTx = rawTx.filter(tx => {
+        if (!tx.created_at || tx.status !== 'voided') return false
+        const txDate = new Date(tx.created_at).toLocaleDateString('sv-SE')
+        return txDate === todayLocal
+      })
+
       const totalOmzet = todayTx.reduce((sum, tx) => sum + (Number(tx.total_amount) || 0), 0)
       const totalQris = todayTx.filter(tx => tx.metode_pembayaran === 'qris').reduce((sum, tx) => sum + (Number(tx.total_amount) || 0), 0)
       const totalTunai = todayTx.filter(tx => tx.metode_pembayaran === 'tunai').reduce((sum, tx) => sum + (Number(tx.total_amount) || 0), 0)
       
       setData({
         total_transaksi: todayTx.length,
+        total_void: todayVoidTx.length,
         total_omzet: formatRupiah(totalOmzet),
         total_qris: formatRupiah(totalQris),
         total_tunai: formatRupiah(totalTunai),
-        transaksi: todayTx.map(tx => ({
+        transaksi: [...todayTx, ...todayVoidTx].map(tx => ({
           db_id: tx.id,
           id: tx.transaction_code || tx.id,
           produk: tx.items?.map(i => i.nama_produk).join(', ') || '-',
@@ -229,7 +320,11 @@ export default function KasirRekapHarian() {
     setSending(true)
     try {
       const outletId = outlets?.[0]?.id || user?.outlets?.[0]?.id
-      if (!outletId) { alert('Outlet tidak ditemukan'); setSending(false); return }
+      if (!outletId) {
+        showToast('Outlet tidak ditemukan', 'error')
+        setSending(false)
+        return
+      }
       const todayLocal = new Date().toLocaleDateString('sv-SE')
       await rekapService.kirimKeAdmin({
         outlet_id: outletId,
@@ -237,10 +332,10 @@ export default function KasirRekapHarian() {
       })
       setSent(true)
       setShowConfirmKirim(false)
-      alert('Berhasil! Rekap harian telah dikirim ke Admin.')
+      showToast('Berhasil! Rekap harian telah dikirim ke Admin.', 'success')
     } catch (err) {
       console.error('Kirim rekap error:', err)
-      alert('Gagal kirim rekap: ' + (err.response?.data?.message || err.message))
+      showToast('Gagal kirim rekap: ' + (err.response?.data?.message || err.message), 'error')
     } finally { setSending(false) }
   }
 
@@ -281,9 +376,10 @@ export default function KasirRekapHarian() {
           </div>
         ) : (
           <>
-            <div className="grid grid-cols-2 xl:grid-cols-4 gap-3 sm:gap-4">
+            <div className="grid grid-cols-2 xl:grid-cols-5 gap-3 sm:gap-4">
               {[
                 { label: 'Total Transaksi', val: data.total_transaksi, color: 'bg-yellow-400' },
+                { label: 'Jumlah Void',     val: data.total_void,      color: 'bg-red-500' },
                 { label: 'Total Omzet',     val: data.total_omzet,     color: 'bg-zinc-800' },
                 { label: 'QRIS',            val: data.total_qris,      color: 'bg-zinc-700' },
                 { label: 'Tunai',           val: data.total_tunai,     color: 'bg-zinc-600' },
@@ -388,6 +484,21 @@ export default function KasirRekapHarian() {
         )}
       </div>
 
+      {toast && (
+        <div className="fixed top-6 left-1/2 -translate-x-1/2 z-[9999] bg-zinc-900 border border-zinc-700 rounded-2xl px-5 py-3.5 flex items-center gap-3 shadow-2xl">
+          {toast.type === 'success' ? (
+            <svg className="w-4 h-4 text-green-400 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M5 13l4 4L19 7" />
+            </svg>
+          ) : (
+            <svg className="w-4 h-4 text-red-400 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+            </svg>
+          )}
+          <span className="text-white text-sm font-semibold whitespace-nowrap">{toast.msg}</span>
+        </div>
+      )}
+
       {selectedKoreksi && (
         <ModalKoreksi
           transaksi={selectedKoreksi}
@@ -396,6 +507,7 @@ export default function KasirRekapHarian() {
             setSelectedKoreksi(null)
             fetchData()
           }}
+          showToast={showToast}
         />
       )}
 

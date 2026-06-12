@@ -487,4 +487,59 @@ class AuthController extends Controller
             'message' => 'Password berhasil direset. Silakan login dengan password baru.',
         ]);
     }
+
+    // UPDATE PASSWORD (AUTHENTICATED)
+    public function updatePassword(Request $request)
+    {
+        $user = JWTAuth::user();
+
+        $validator = Validator::make($request->all(), [
+            'old_password' => 'required',
+            'password'     => [
+                'required',
+                'confirmed',
+                PasswordRule::min(8)
+                    ->letters()
+                    ->mixedCase()
+                    ->numbers()
+                    ->symbols()
+            ],
+        ], [
+            'old_password.required' => 'Password lama wajib diisi.',
+            'password.required'     => 'Password baru wajib diisi.',
+            'password.min'          => 'Password minimal 8 karakter.',
+            'password.letters'      => 'Password harus mengandung huruf.',
+            'password.mixed'        => 'Password harus mengandung huruf besar dan kecil.',
+            'password.numbers'      => 'Password harus mengandung angka.',
+            'password.symbols'      => 'Password harus mengandung simbol.',
+            'password.confirmed'    => 'Konfirmasi password tidak cocok.',
+        ]);
+
+        if ($validator->fails()) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Validasi gagal.',
+                'errors'  => $validator->errors()
+            ], 422);
+        }
+
+        if (!Hash::check($request->old_password, $user->password)) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Password lama salah.',
+                'errors'  => [
+                    'old_password' => ['Password lama salah.']
+                ]
+            ], 422);
+        }
+
+        $user->update([
+            'password' => Hash::make($request->password)
+        ]);
+
+        return response()->json([
+            'success' => true,
+            'message' => 'Password berhasil diperbarui.'
+        ]);
+    }
 }

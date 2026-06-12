@@ -1,6 +1,7 @@
 import { useState, useEffect, useRef } from 'react'
 import Layout from '../../components/Layout'
 import useAuthStore from '../../store/authStore'
+import { pengaturanService } from '../../services/pengaturanService'
 
 function EyeIcon({ open }) {
   return open
@@ -16,7 +17,7 @@ function EyeIcon({ open }) {
 }
 
 export default function AdminPengaturan() {
-  const { user, setAuth, role, token } = useAuthStore()
+  const { user, setAuth, role, token, setUser } = useAuthStore()
   const fileRef = useRef(null)
 
   const [tab, setTab]         = useState('profil')
@@ -39,9 +40,9 @@ useEffect(() => {
     setProfile({
       nama:    user.name    || user.nama    || '',
       email:   user.email   || '',
-      telepon: user.phone   || user.telepon || '',
+      telepon: user.no_telepon || user.telepon || user.phone || '',
     })
-    setFotoPreview(user.foto || user.avatar || null)
+    setFotoPreview(user.avatar_url || user.foto || user.avatar || null)
   }
 }, [user])
 
@@ -82,32 +83,29 @@ useEffect(() => {
 
     setLoadingProfile(true)
     try {
-      // TODO: backend siap → uncomment:
-      // const formData = new FormData()
-      // formData.append('name',   profile.nama)
-      // formData.append('email',  profile.email)
-      // formData.append('phone',  profile.telepon)
-      // if (fotoFile instanceof File) formData.append('foto', fotoFile)
-      // else if (!fotoPreview) formData.append('hapus_foto', '1')
-      // const res = await pengaturanService.updateProfile(formData)
-      // const updatedUser = res.data.data
-      // setAuth(updatedUser, token, role)
-
-      // Dummy: update store lokal dengan data baru termasuk foto
-      await new Promise(r => setTimeout(r, 800))
+      const formData = new FormData()
+      formData.append('name', profile.nama)
+      formData.append('no_telepon', profile.telepon)
+      if (user?.instansi) {
+        formData.append('instansi', user.instansi)
+      }
+      if (fotoFile instanceof File) {
+        formData.append('avatar', fotoFile)
+      }
+      
+      const res = await pengaturanService.updateProfile(formData)
       const updatedUser = {
         ...user,
-        nama:    profile.nama,
-        email:   profile.email,
-        telepon: profile.telepon,
-        foto:    fotoPreview, // URL base64 atau null
+        name: res.data.data.name,
+        no_telepon: res.data.data.no_telepon,
+        avatar_url: res.data.data.avatar_url,
       }
-      setAuth(updatedUser, token)
+      setUser(updatedUser)
       setFotoFile(null) // reset file setelah disimpan
       setSuccessProfile(true)
       setTimeout(() => setSuccessProfile(false), 3000)
-    } catch {
-      setErrors({ global: 'Gagal menyimpan profil' })
+    } catch (err) {
+      setErrors({ global: err.response?.data?.message || 'Gagal menyimpan profil' })
     } finally { setLoadingProfile(false) }
   }
 
@@ -120,13 +118,24 @@ useEffect(() => {
     if (Object.keys(err).length) { setErrors(err); return }
     setLoadingPassword(true)
     try {
-      // TODO: await pengaturanService.updatePassword(password)
-      await new Promise(r => setTimeout(r, 800))
+      await pengaturanService.updatePassword({
+        old_password: password.lama,
+        password: password.baru,
+        password_confirmation: password.konfirmasi
+      })
       setPassword({ lama: '', baru: '', konfirmasi: '' })
       setSuccessPassword(true)
       setTimeout(() => setSuccessPassword(false), 3000)
-    } catch {
-      setErrors({ passwordGlobal: 'Gagal mengubah password' })
+    } catch (err) {
+      if (err.response?.data?.errors) {
+        const apiErrors = err.response.data.errors
+        const formErrors = {}
+        if (apiErrors.old_password) formErrors.lama = apiErrors.old_password[0]
+        if (apiErrors.password) formErrors.baru = apiErrors.password[0]
+        setErrors(formErrors)
+      } else {
+        setErrors({ passwordGlobal: err.response?.data?.message || 'Gagal mengubah password' })
+      }
     } finally { setLoadingPassword(false) }
   }
 

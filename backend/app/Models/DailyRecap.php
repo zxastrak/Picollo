@@ -11,6 +11,7 @@ class DailyRecap extends Model
         'user_id',
         'tanggal',
         'total_transaksi',
+        'total_void',
         'total_amount',
         'total_qris',
         'total_tunai',

@@ -49,9 +49,37 @@ function getPerubahanRingkasan(l) {
   if (l.correction_type === 'edit_items') {
     const oldItems = oldData.items || []
     const newItems = newData.items || []
-    const removedCount = oldItems.length - newItems.length
+    const oldItemsMap = new Map(oldItems.map(i => [i.product_id, i]))
+    const newItemsMap = new Map(newItems.map(i => [i.product_id, i]))
+
+    const itemChanges = []
+    
+    // Check removed
+    const removedCount = oldItems.filter(i => !newItemsMap.has(i.product_id)).length
     if (removedCount > 0) {
-      changes.push(`${removedCount} item dihapus`)
+      itemChanges.push(`${removedCount} item dihapus`)
+    }
+
+    // Check added
+    const addedCount = newItems.filter(i => !oldItemsMap.has(i.product_id)).length
+    if (addedCount > 0) {
+      itemChanges.push(`${addedCount} item ditambahkan`)
+    }
+
+    // Check quantity changes
+    let qtyChangeCount = 0
+    newItems.forEach(newItem => {
+      const oldItem = oldItemsMap.get(newItem.product_id)
+      if (oldItem && oldItem.qty !== newItem.qty) {
+        qtyChangeCount++
+      }
+    })
+    if (qtyChangeCount > 0) {
+      itemChanges.push(`${qtyChangeCount} jumlah item diubah`)
+    }
+
+    if (itemChanges.length > 0) {
+      changes.push(itemChanges.join(', '))
     }
   }
 
@@ -113,14 +141,42 @@ function getPerubahanDetail(l) {
   if (l.correction_type === 'edit_items') {
     const oldItems = oldData.items || []
     const newItems = newData.items || []
-    const newItemIds = new Set(newItems.map(i => i.id))
-    const removed = oldItems.filter(i => !newItemIds.has(i.id))
-    removed.forEach(item => {
-      details.push({
-        label: `Item Dihapus`,
-        lama: `${item.nama_produk || 'Produk'} x${item.qty} (${formatRupiah(item.subtotal)})`,
-        baru: '(dihapus)'
-      })
+    const newItemProductIds = new Set(newItems.map(i => i.product_id))
+    const oldItemsMap = new Map(oldItems.map(i => [i.product_id, i]))
+    const newItemsMap = new Map(newItems.map(i => [i.product_id, i]))
+
+    // 1. Items that were removed completely
+    oldItems.forEach(oldItem => {
+      if (!newItemProductIds.has(oldItem.product_id)) {
+        details.push({
+          label: `Item Dihapus`,
+          lama: `${oldItem.nama_produk || 'Produk'} x${oldItem.qty} (${formatRupiah(oldItem.subtotal)})`,
+          baru: '(dihapus)'
+        })
+      }
+    })
+
+    // 2. Items that were added completely
+    newItems.forEach(newItem => {
+      if (!oldItemsMap.has(newItem.product_id)) {
+        details.push({
+          label: `Item Ditambahkan`,
+          lama: '(tidak ada)',
+          baru: `${newItem.nama_produk || 'Produk'} x${newItem.qty} (${formatRupiah(newItem.subtotal)})`
+        })
+      }
+    })
+
+    // 3. Items whose quantity was changed
+    newItems.forEach(newItem => {
+      const oldItem = oldItemsMap.get(newItem.product_id)
+      if (oldItem && oldItem.qty !== newItem.qty) {
+        details.push({
+          label: `Jumlah Item Diubah`,
+          lama: `${oldItem.nama_produk || 'Produk'} x${oldItem.qty} (${formatRupiah(oldItem.subtotal)})`,
+          baru: `${newItem.nama_produk || 'Produk'} x${newItem.qty} (${formatRupiah(newItem.subtotal)})`
+        })
+      }
     })
   }
 

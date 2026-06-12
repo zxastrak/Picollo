@@ -23,10 +23,7 @@ class ResetPasswordNotification extends Notification
 
     public function toMail(object $notifiable): MailMessage
     {
-        // FIX: Gunakan env('FRONTEND_URL') langsung karena config/app.php
-        // default Laravel tidak punya key 'frontend_url'.
-        // Alternatif: tambahkan 'frontend_url' => env('FRONTEND_URL') di config/app.php
-        $frontendUrl = env('FRONTEND_URL', 'http://localhost:5173');
+        $frontendUrl = config('app.frontend_url');
         $resetUrl    = $frontendUrl . '/reset-password?token=' . $this->token . '&email=' . urlencode($this->email);
 
         return (new MailMessage)

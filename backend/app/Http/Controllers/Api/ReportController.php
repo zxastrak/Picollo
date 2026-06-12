@@ -27,23 +27,25 @@ class ReportController extends Controller
             $outletIds = collect([$request->outlet_id]);
         }
 
+        $startDate = $request->start_date;
+        $endDate = $request->end_date;
+
+        // Restriksi untuk Kasir: hanya melihat transaksi buatannya sendiri dan hari ini saja
+        if ($user->hasRole('kasir')) {
+            $startDate = Carbon::today()->format('Y-m-d');
+            $endDate = Carbon::today()->format('Y-m-d');
+        }
+
         $query = Transaction::whereIn('outlet_id', $outletIds)
             ->where('status', 'success')
             ->whereBetween('created_at', [
-                $request->start_date . ' 00:00:00',
-                $request->end_date   . ' 23:59:59',
+                $startDate . ' 00:00:00',
+                $endDate   . ' 23:59:59',
             ]);
 
         // Restriksi untuk Kasir: hanya melihat transaksi buatannya sendiri
         if ($user->hasRole('kasir')) {
             $query->where('user_id', $user->id);
-            // Paksa rentang tanggal ke hari ini saja untuk kasir
-            // agar mereka tidak bisa mengintip laporan hari lain
-            $today = Carbon::today()->format('Y-m-d');
-            $query->whereBetween('created_at', [
-                $today . ' 00:00:00',
-                $today . ' 23:59:59',
-            ]);
         }
 
         return $query->with(['outlet:id,nama', 'kasir:id,name'])
@@ -145,20 +147,23 @@ class ReportController extends Controller
         if ($request->outlet_id && $outletIds->contains($request->outlet_id)) {
             $outletIds = collect([$request->outlet_id]);
         }
+
+        $startDate = $request->start_date;
+        $endDate = $request->end_date;
+
+        if ($user->hasRole('kasir')) {
+            $startDate = Carbon::today()->format('Y-m-d');
+            $endDate = Carbon::today()->format('Y-m-d');
+        }
         
         $koreksiQuery = CorrectionLog::whereIn('outlet_id', $outletIds)
             ->whereBetween('created_at', [
-                $request->start_date . ' 00:00:00',
-                $request->end_date   . ' 23:59:59',
+                $startDate . ' 00:00:00',
+                $endDate   . ' 23:59:59',
             ]);
             
         if ($user->hasRole('kasir')) {
             $koreksiQuery->where('corrected_by', $user->id);
-            $today = Carbon::today()->format('Y-m-d');
-            $koreksiQuery->whereBetween('created_at', [
-                $today . ' 00:00:00',
-                $today . ' 23:59:59',
-            ]);
         }
 
         $logs = $koreksiQuery->get();

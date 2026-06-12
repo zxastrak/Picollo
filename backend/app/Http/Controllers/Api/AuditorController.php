@@ -30,6 +30,7 @@ class AuditorController extends Controller
                 'outlets'       => $a->outlets,
                 'instansi'      => $a->instansi,
                 'created_at'    => $a->created_at,
+                'avatar_url'    => $a->avatar_url,
             ]);
 
         return response()->json([
@@ -80,6 +81,7 @@ class AuditorController extends Controller
             'outlet_ids' => 'required|array|min:1',
             'outlet_ids.*' => 'integer|exists:outlets,id',
             'instansi'   => 'required|string|max:255',
+            'avatar'     => 'nullable|image|mimes:jpeg,png,jpg|max:2048',
         ], [
             'name.required'      => 'Nama auditor wajib diisi.',
             'email.required'     => 'Email wajib diisi.',
@@ -95,6 +97,9 @@ class AuditorController extends Controller
             'outlet_ids.array'   => 'Format outlet tidak valid.',
             'outlet_ids.*.exists'=> 'Outlet tidak ditemukan.',
             'instansi.required'  => 'Instansi wajib diisi.',
+            'avatar.image'       => 'File harus berupa gambar.',
+            'avatar.mimes'       => 'Format gambar harus jpeg, png, atau jpg.',
+            'avatar.max'         => 'Ukuran gambar maksimal 2MB.',
         ]);
 
         if ($validator->fails()) {
@@ -114,6 +119,14 @@ class AuditorController extends Controller
             ], 403);
         }
 
+        $avatarUrl = null;
+        if ($request->hasFile('avatar')) {
+            $file = $request->file('avatar');
+            $filename = 'avatar_' . uniqid() . '_' . time() . '.' . $file->getClientOriginalExtension();
+            $file->move(public_path('avatars'), $filename);
+            $avatarUrl = url('avatars/' . $filename);
+        }
+
         $auditor = User::create([
             'name'       => $request->name,
             'email'      => $request->email,
@@ -122,13 +135,14 @@ class AuditorController extends Controller
             'is_active'  => true,
             'email_verified_at' => now(),
             'instansi'   => $request->instansi,
+            'avatar_url' => $avatarUrl,
         ]);
 
         $auditor->assignRole('auditor');
         $auditor->outlets()->attach($request->outlet_ids);
 
         try {
-            $loginUrl = url('http://localhost:5173/login');
+            $loginUrl = config('app.frontend_url') . '/login';
             \Illuminate\Support\Facades\Mail::to($auditor->email)->send(new \App\Mail\AccountCreatedMail($request->email, $request->password, 'Auditor', $loginUrl));
         } catch (\Exception $e) {
             \Log::error('Failed to send account created email: ' . $e->getMessage());
@@ -144,6 +158,7 @@ class AuditorController extends Controller
                 'no_telepon' => $auditor->no_telepon,
                 'outlet_ids' => $request->outlet_ids,
                 'instansi'   => $auditor->instansi,
+                'avatar_url' => $auditor->avatar_url,
             ],
         ], 201);
     }

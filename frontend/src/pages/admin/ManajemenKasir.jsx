@@ -56,14 +56,16 @@ function ModalBuatKasir({ outlets, onClose, onSave }) {
     if (Object.keys(e).length) { setErrors(e); return }
     setLoading(true)
     try {
-      const payload = {
-        name: form.nama,
-        email: form.email,
-        password: form.password,
-        password_confirmation: form.password,
-        outlet_id: parseInt(form.outlet_id),
+      const fd = new FormData()
+      fd.append('name', form.nama)
+      fd.append('email', form.email)
+      fd.append('password', form.password)
+      fd.append('password_confirmation', form.password)
+      fd.append('outlet_id', form.outlet_id)
+      if (foto) {
+        fd.append('avatar', foto)
       }
-      const res = await kasirService.create(payload)
+      const res = await kasirService.create(fd)
       const newKasirObj = {
         id: res.data.data.id,
         nama: res.data.data.name,
@@ -72,7 +74,7 @@ function ModalBuatKasir({ outlets, onClose, onSave }) {
         bergabung: new Date().toLocaleDateString('id-ID'),
         status: 'aktif',
         total_transaksi: 0,
-        foto: null,
+        foto: res.data.data.avatar_url || null,
         password_plain: form.password,
       }
       onSave(newKasirObj)

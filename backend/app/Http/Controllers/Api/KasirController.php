@@ -19,6 +19,7 @@ class KasirController extends Controller
         $outletIds = $request->user()->outlets()->pluck('outlets.id');
 
         $kasirList = User::role('kasir')
+            ->whereDoesntHave('roles', fn($q) => $q->where('name', 'admin'))
             ->whereHas('outlets', fn($q) => $q->whereIn('outlets.id', $outletIds))
             ->with('outlets:id,nama,kode_outlet')
             ->get()
@@ -46,6 +47,7 @@ class KasirController extends Controller
         $outletIds = $request->user()->outlets()->pluck('outlets.id');
 
         $kasir = User::role('kasir')
+            ->whereDoesntHave('roles', fn($q) => $q->where('name', 'admin'))
             ->whereHas('outlets', fn($q) => $q->whereIn('outlets.id', $outletIds))
             ->with('outlets:id,nama,kode_outlet')
             ->find($id);
@@ -80,6 +82,7 @@ class KasirController extends Controller
             ],
             'no_telepon' => 'nullable|string|max:20',
             'outlet_id'  => 'required|integer|exists:outlets,id',
+            'avatar'     => 'nullable|image|mimes:jpeg,png,jpg|max:2048',
         ], [
             'name.required'      => 'Nama kasir wajib diisi.',
             'email.required'     => 'Email wajib diisi.',
@@ -93,6 +96,9 @@ class KasirController extends Controller
             'password.confirmed' => 'Konfirmasi password tidak cocok.',
             'outlet_id.required' => 'Outlet wajib dipilih.',
             'outlet_id.exists'   => 'Outlet tidak ditemukan.',
+            'avatar.image'       => 'File harus berupa gambar.',
+            'avatar.mimes'       => 'Format gambar harus jpeg, png, atau jpg.',
+            'avatar.max'         => 'Ukuran gambar maksimal 2MB.',
         ]);
 
         if ($validator->fails()) {
@@ -111,6 +117,14 @@ class KasirController extends Controller
             ], 403);
         }
 
+        $avatarUrl = null;
+        if ($request->hasFile('avatar')) {
+            $file = $request->file('avatar');
+            $filename = 'avatar_' . uniqid() . '_' . time() . '.' . $file->getClientOriginalExtension();
+            $file->move(public_path('avatars'), $filename);
+            $avatarUrl = url('avatars/' . $filename);
+        }
+
         $kasir = User::create([
             'name'       => $request->name,
             'email'      => $request->email,
@@ -118,13 +132,14 @@ class KasirController extends Controller
             'no_telepon' => $request->no_telepon,
             'is_active'  => true,
             'email_verified_at' => now(),
+            'avatar_url' => $avatarUrl,
         ]);
 
         $kasir->assignRole('kasir');
         $kasir->outlets()->attach($request->outlet_id);
 
         try {
-            $loginUrl = url('http://localhost:5173/login');
+            $loginUrl = config('app.frontend_url') . '/login';
             \Illuminate\Support\Facades\Mail::to($kasir->email)->send(new \App\Mail\AccountCreatedMail($request->email, $request->password, 'Kasir', $loginUrl));
         } catch (\Exception $e) {
             \Log::error('Failed to send account created email: ' . $e->getMessage());
@@ -139,6 +154,7 @@ class KasirController extends Controller
                 'email'      => $kasir->email,
                 'no_telepon' => $kasir->no_telepon,
                 'outlet_id'  => $request->outlet_id,
+                'avatar_url' => $kasir->avatar_url,
             ],
         ], 201);
     }
@@ -149,6 +165,7 @@ class KasirController extends Controller
         $outletIds = $request->user()->outlets()->pluck('outlets.id');
 
         $kasir = User::role('kasir')
+            ->whereDoesntHave('roles', fn($q) => $q->where('name', 'admin'))
             ->whereHas('outlets', fn($q) => $q->whereIn('outlets.id', $outletIds))
             ->find($id);
 
@@ -240,6 +257,7 @@ class KasirController extends Controller
         $outletIds = $request->user()->outlets()->pluck('outlets.id');
 
         $kasir = User::role('kasir')
+            ->whereDoesntHave('roles', fn($q) => $q->where('name', 'admin'))
             ->whereHas('outlets', fn($q) => $q->whereIn('outlets.id', $outletIds))
             ->find($id);
 
@@ -265,6 +283,7 @@ class KasirController extends Controller
         $outletIds = $request->user()->outlets()->pluck('outlets.id');
 
         $kasir = User::role('kasir')
+            ->whereDoesntHave('roles', fn($q) => $q->where('name', 'admin'))
             ->whereHas('outlets', fn($q) => $q->whereIn('outlets.id', $outletIds))
             ->find($id);
 

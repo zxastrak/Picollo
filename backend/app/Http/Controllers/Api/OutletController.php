@@ -203,7 +203,7 @@ class OutletController extends Controller
         $validator = Validator::make($request->all(), [
             'products' => 'present|array',
             'products.*.id' => 'required|integer|exists:products,id',
-            'products.*.stok' => 'required|integer|min:0',
+            'products.*.stok' => 'required|integer',
             'products.*.harga' => 'nullable|numeric|min:0',
             'products.*.modal' => 'nullable|numeric|min:0',
         ]);

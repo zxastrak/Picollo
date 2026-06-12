@@ -453,8 +453,8 @@ function ModalAturProduk({ outlet, onClose }) {
                       <div className="flex items-center gap-3 shrink-0 flex-wrap justify-end max-w-sm">
                         <div className="flex items-center gap-1.5">
                           <label className="text-[10px] text-zinc-500 uppercase font-bold tracking-wider">Stok</label>
-                          <input type="number" min="0"
-                            value={sel.stok === 0 ? '' : sel.stok}
+                          <input type="number"
+                            value={sel.stok}
                             placeholder="0"
                             onChange={e => changeStok(p.id, e.target.value)}
                             className="w-16 border border-zinc-300 rounded-lg px-2 py-1.5 text-xs font-mono focus:outline-none focus:border-yellow-400 text-center"

@@ -336,16 +336,16 @@ function TabRekapKasir() {
         <table className="w-full text-left border-collapse">
           <thead>
             <tr className="bg-white border-b border-zinc-100">
-              {['Tanggal', 'Kasir', 'Tunai', 'QRIS', 'Total Transaksi', 'Status / Aksi'].map(h => (
+              {['Tanggal', 'Kasir', 'Tunai', 'QRIS', 'Total Transaksi', 'Void', 'Status / Aksi'].map(h => (
                 <th key={h} className="px-6 py-4 text-xs font-bold text-zinc-400 uppercase tracking-wider">{h}</th>
               ))}
             </tr>
           </thead>
           <tbody className="divide-y divide-zinc-50/80">
             {loading ? (
-              <tr><td colSpan={6} className="px-6 py-12 text-center text-zinc-400"><div className="animate-pulse flex items-center justify-center gap-2"><div className="w-2 h-2 bg-zinc-300 rounded-full"></div><div className="w-2 h-2 bg-zinc-300 rounded-full delay-75"></div><div className="w-2 h-2 bg-zinc-300 rounded-full delay-150"></div></div></td></tr>
+              <tr><td colSpan={7} className="px-6 py-12 text-center text-zinc-400"><div className="animate-pulse flex items-center justify-center gap-2"><div className="w-2 h-2 bg-zinc-300 rounded-full"></div><div className="w-2 h-2 bg-zinc-300 rounded-full delay-75"></div><div className="w-2 h-2 bg-zinc-300 rounded-full delay-150"></div></div></td></tr>
             ) : rekaps.length === 0 ? (
-              <tr><td colSpan={6} className="px-6 py-16 text-center text-zinc-400 text-sm font-medium">Belum ada rekap yang disubmit kasir</td></tr>
+              <tr><td colSpan={7} className="px-6 py-16 text-center text-zinc-400 text-sm font-medium">Belum ada rekap yang disubmit kasir</td></tr>
             ) : (
               rekaps.map(r => (
                 <tr key={r.id} className="hover:bg-zinc-50/80 transition-colors">
@@ -366,6 +366,9 @@ function TabRekapKasir() {
                   <td className="px-6 py-4">
                     <p className="text-sm font-bold text-zinc-900">{r.total_transaksi}</p>
                     <p className="text-xs text-zinc-500 mt-0.5">Total: {formatRupiah(r.total_amount)}</p>
+                  </td>
+                  <td className="px-6 py-4">
+                    <p className="text-sm font-bold text-red-600">{r.total_void || 0}</p>
                   </td>
                   <td className="px-6 py-4">
                     <div className="flex flex-col gap-2">

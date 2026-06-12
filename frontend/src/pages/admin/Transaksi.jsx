@@ -71,6 +71,9 @@ export default function AdminTransaksi() {
         waktu: tx.created_at ? new Date(tx.created_at).toLocaleString('id-ID', { day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' }) : '-',
         hash: tx.hash_verification?.hash_sha256 || '-',
         status: tx.status === 'success' ? 'verified' : tx.status || 'pending',
+        catatan: tx.catatan || '-',
+        referensi: tx.payment_reference || '-',
+        items: tx.items || [],
       }))
       setData(mapped)
     } catch (err) {
@@ -204,16 +207,31 @@ export default function AdminTransaksi() {
                 {Object.entries({
                   'ID Transaksi': detail.id, 'Kasir': detail.kasir, 'Outlet': detail.outlet,
                   'Total': detail.total, 'Metode': detail.metode, 'Waktu': detail.waktu,
-                  'Status': detail.status
+                  'Referensi': detail.referensi, 'Catatan': detail.catatan, 'Status': detail.status
                 }).map(([k, v]) => (
                   <div key={k} className="flex justify-between text-sm">
                     <span className="text-zinc-500">{k}</span>
-                    <span className="text-zinc-900 font-medium font-mono text-right max-w-xs truncate">{v}</span>
+                    <span className="text-zinc-900 font-medium text-right max-w-[60%] truncate">{v}</span>
                   </div>
                 ))}
+                
+                {detail.items && detail.items.length > 0 && (
+                  <div className="pt-2 border-t border-zinc-100 mt-2">
+                    <p className="text-xs font-semibold text-zinc-500 uppercase tracking-wide mb-2">Item Transaksi</p>
+                    <div className="space-y-1.5 max-h-40 overflow-y-auto pr-1">
+                      {detail.items.map((item, idx) => (
+                        <div key={idx} className="flex justify-between text-xs py-1 border-b border-zinc-50 last:border-0 text-left">
+                          <span className="text-zinc-700 font-medium">{item.nama_produk} <span className="text-zinc-400">x{item.qty}</span></span>
+                          <span className="text-zinc-900 font-semibold">{formatRupiah(item.subtotal)}</span>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
                 <div className="pt-2 border-t border-zinc-100 mt-2">
-                  <p className="text-xs text-zinc-500 mb-1">Hash Verification (SHA-256)</p>
-                  <p className="text-xs font-mono text-zinc-800 break-all bg-zinc-50 p-2 rounded-lg border border-zinc-200">
+                  <p className="text-xs text-zinc-500 mb-1 text-left">Hash Verification (SHA-256)</p>
+                  <p className="text-xs font-mono text-zinc-800 break-all bg-zinc-50 p-2 rounded-lg border border-zinc-200 text-left">
                     {detail.hash}
                   </p>
                 </div>
